@@ -36,13 +36,13 @@ func parseLogMessage(msg string) (result LogEntry, err error) {
 	dec := json.NewDecoder(strings.NewReader(msg))
 
 	// look for an initial "{"
-	if token, err := dec.Token(); err != nil {
+	token, err := dec.Token()
+	if err != nil {
 		return result, err
-	} else {
-		d, ok := token.(json.Delim)
-		if !ok || d != '{' {
-			return result, fmt.Errorf("input is not a JSON object, found: %v", token)
-		}
+	}
+	d, ok := token.(json.Delim)
+	if !ok || d != '{' {
+		return result, fmt.Errorf("input is not a JSON object, found: %v", token)
 	}
 
 	// read all key-value pairs
@@ -51,67 +51,67 @@ func parseLogMessage(msg string) (result LogEntry, err error) {
 		if err != nil {
 			return result, err
 		}
-		if skey, ok := key.(string); !ok {
+		skey, ok := key.(string)
+		if !ok {
 			return result, errors.New("key is not a value string")
-		} else {
-			if !dec.More() {
-				return result, errors.New("missing value pair")
+		}
+		if !dec.More() {
+			return result, errors.New("missing value pair")
+		}
+
+		switch skey {
+		case "ts":
+			var ts json.Number
+			if err := dec.Decode(&ts); err != nil {
+				return result, err
 			}
-
-			switch skey {
-			case "ts":
-				var ts json.Number
-				if err := dec.Decode(&ts); err != nil {
-					return result, err
-				}
-				if time, err := numberToTime(ts); err != nil {
-					return result, err
-				} else {
-					result.Time = time
-				}
-
-			case "level":
-				if s, err := decodeAsString(dec); err != nil {
-					return result, err
-				} else {
-					result.Level = s
-				}
-
-			case "msg":
-				if s, err := decodeAsString(dec); err != nil {
-					return result, err
-				} else {
-					result.Message = s
-				}
-
-			case "caller":
-				if s, err := decodeAsString(dec); err != nil {
-					return result, err
-				} else {
-					result.Caller = s
-				}
-
-			default:
-				var p interface{}
-				if err := dec.Decode(&p); err != nil {
-					return result, err
-				}
-				var f mlog.Field
-				f.Key = skey
-				f.Interface = p
-				result.Fields = append(result.Fields, f)
+			timeVal, err := numberToTime(ts)
+			if err != nil {
+				return result, err
 			}
+			result.Time = timeVal
+
+		case "level":
+			s, err := decodeAsString(dec)
+			if err != nil {
+				return result, err
+			}
+			result.Level = s
+
+		case "msg":
+			s, err := decodeAsString(dec)
+			if err != nil {
+				return result, err
+			}
+			result.Message = s
+
+		case "caller":
+			s, err := decodeAsString(dec)
+			if err != nil {
+				return result, err
+			}
+			result.Caller = s
+
+		default:
+			var p interface{}
+			if err := dec.Decode(&p); err != nil {
+				return result, err
+			}
+			var f mlog.Field
+			f.Key = skey
+			f.Interface = p
+			result.Fields = append(result.Fields, f)
 		}
 	}
 
 	// read the "}"
-	if token, err := dec.Token(); err != nil {
+	token, err = dec.Token()
+	if err != nil {
 		return result, err
-	} else {
-		d, ok := token.(json.Delim)
-		if !ok || d != '}' {
-			return result, fmt.Errorf("failed to read '}', read: %v", token)
-		}
+	}
+	d, ok = token.(json.Delim)
+	if !ok || d != '}' {
+		return result, fmt.Errorf("failed to read '}', read: %v", token)
 	}
 
 	// make sure nothing else trailing
